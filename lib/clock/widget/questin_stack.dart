@@ -2,17 +2,17 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_analog_clock/flutter_analog_clock.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
-import 'package:test_project/data/provider/clock_provider.dart';
+import 'package:test_project/clock/provider/clock_provider.dart';
 
-import 'package:test_project/pages/question_page.dart';
-import 'package:vibration/vibration.dart';
+import '../../router/app_router.dart';
 
+/// Виджет стека вопросов.
 class QusetionStack extends StatefulWidget {
   const QusetionStack({
     super.key,
@@ -22,6 +22,7 @@ class QusetionStack extends StatefulWidget {
   State<QusetionStack> createState() => _QusetionStackState();
 }
 
+/// Состояние виджета стека вопросов.
 class _QusetionStackState extends State<QusetionStack>
     with TickerProviderStateMixin {
   @override
@@ -68,19 +69,14 @@ class _QusetionStackState extends State<QusetionStack>
                                 clockProvider: clockProvider,
                                 onPressed: () {
                                   clockProvider.reset();
-                                  Navigator.pop(context);
+                                
                                 },
                                 text: "Начать заново",
                                 titileText: 'Вы умеете пользоваться часами!',
                               );
                             });
                       } else {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute<void>(
-                              builder: (BuildContext context) =>
-                                  const QusetionPage()),
-                          ModalRoute.withName('/'),
-                        );
+                       context.router.push(const QusetionRoute());
                       }
                     } else {
                       if (clockProvider.count > -10) {
@@ -95,7 +91,7 @@ class _QusetionStackState extends State<QusetionStack>
                               return DialogCount(clockProvider: clockProvider, onPressed: () {  
 
                                 clockProvider.reset();
-                                Navigator.pop(context);
+                             context.popRoute();
                               },text: "Начать заново", titileText: 'Превышен лимит',);
                             });
                       }
@@ -132,6 +128,7 @@ class _QusetionStackState extends State<QusetionStack>
   }
 }
 
+/// Диалоговое окно счетчика.
 class DialogCount extends StatelessWidget {
   final Function() onPressed;
   final String text;
@@ -164,8 +161,8 @@ class DialogCount extends StatelessWidget {
                   children: [
                     TextButton(
                         onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.pop(context);
+                         
+                                context.router.back();
                           clockProvider.reset();
                           
                         },
@@ -186,6 +183,7 @@ class DialogCount extends StatelessWidget {
   }
 }
 
+/// Генерирует список моделей часов.
 _generateList() {
   List list = [];
 
@@ -222,6 +220,7 @@ _generateList() {
   return list;
 }
 
+/// Модель часов.
 class ModelClock {
   int index;
   int minute;
@@ -292,6 +291,7 @@ class ModelClock {
   }
 }
 
+/// Контейнер вопроса.
 class QuestionContainer extends StatelessWidget {
   final Function(int) onTap;
   final ModelClock model;

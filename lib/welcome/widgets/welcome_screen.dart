@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:test_project/data/class/card_class.dart';
-import 'package:test_project/logic/navigation/navigation/navigation_bloc.dart';
-import 'package:test_project/logic/navigation/navigation/navigation_state.dart';
-import 'package:test_project/widgets/favorite_widget.dart';
-import 'package:test_project/widgets/settings_widget.dart';
+import 'package:test_project/welcome/data/card_class.dart';
+import 'package:test_project/welcome/bloc/navigation_bloc.dart';
+import 'package:test_project/welcome/bloc/navigation_state.dart';
+import 'package:test_project/welcome/widgets/favorite_widget.dart';
+import 'package:test_project/welcome/widgets/settings_widget.dart';
 
 class WelcomeScreen extends StatefulWidget {
   final List<CardClass> listCards;

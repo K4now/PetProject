@@ -71,7 +71,7 @@ class CardWidget extends StatelessWidget {
                 ),
               ),
             ),
-          )),
+          ),),
     );
   }
 }

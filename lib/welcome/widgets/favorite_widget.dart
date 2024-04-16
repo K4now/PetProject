@@ -1,5 +1,5 @@
-import '../data/class/card_class.dart';
-import 'package:test_project/widgets/card_widget.dart';
+import '../data/card_class.dart';
+import 'package:test_project/welcome/widgets/card_widget.dart';
 
 import 'package:flutter/material.dart';
 

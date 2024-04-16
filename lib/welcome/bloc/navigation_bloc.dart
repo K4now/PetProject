@@ -1,7 +1,7 @@
 import 'dart:developer' as developer;
 
 import 'package:bloc/bloc.dart';
-import 'package:test_project/logic/navigation/navigation/index.dart';
+import 'package:test_project/welcome/bloc/index.dart';
 
 class NavigationBloc extends Bloc<NavigationEvent, NavigationState> {
 
