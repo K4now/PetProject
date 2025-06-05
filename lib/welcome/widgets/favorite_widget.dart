@@ -15,31 +15,33 @@ class FavoriteWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // current telegram version
-        Text(TelegramWebApp.instance.version),
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // current telegram version
+          Text(TelegramWebApp.instance.version),
 
-        Text(TelegramWebApp.instance.themeParams.toString()),
+          Text(TelegramWebApp.instance.themeParams.toString()),
 
-// Object containing user details and user validation hash
-        Text(TelegramWebApp.instance.initData.toString()),
-        ListView.builder(
-          itemCount: listCards.length,
-          itemBuilder: (context, index) {
-            return CardWidget(
-              name: listCards[index].name,
-              description: listCards[index].description,
-              onPressed: () {
-                listCards[index].onPressed();
-              },
-              color: listCards[index].color,
-              colorText: listCards[index].colorText,
-              child: listCards[index].child,
-            );
-          },
-        ),
-      ],
+          // Object containing user details and user validation hash
+          Text(TelegramWebApp.instance.initData.toString()),
+          ListView.builder(
+            itemCount: listCards.length,
+            itemBuilder: (context, index) {
+              return CardWidget(
+                name: listCards[index].name,
+                description: listCards[index].description,
+                onPressed: () {
+                  listCards[index].onPressed();
+                },
+                color: listCards[index].color,
+                colorText: listCards[index].colorText,
+                child: listCards[index].child,
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }
