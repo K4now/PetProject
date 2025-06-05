@@ -23,7 +23,7 @@ jobs:
         
 
       - name: Build Flutter Web
-        run: flutter build web --release
+        run: flutter build web --release --base-href="/PetProject/"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
