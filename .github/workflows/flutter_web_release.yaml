@@ -1,32 +1,39 @@
-name: Deploy Flutter Web to GitHub Pages
+name: Web deploy
 
 on:
   push:
     branches:
-      - main  # Триггер на пуши в main
+      - main
+
+permissions:
+  contents: write
 
 jobs:
-  build-and-deploy:
+  web_deploy:
+    name: Deployment
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.2'
+          flutter-version: '3.22.1' # Или замени на нужную
+          channel: stable
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+          cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
 
       - name: Install dependencies
         run: flutter pub get
-        
 
       - name: Build Flutter Web
         run: flutter build web --release --base-href="/PetProject/"
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          personal_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          publish_dir: build/web
+          branch: gh-pages
+          folder: build/web
