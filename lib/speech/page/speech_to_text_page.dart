@@ -31,7 +31,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   final FocusNode _focusNode = FocusNode();
   bool _isPressed = false;
   double _slideDistance = 0.0;
+  double _slideUpDistance = 0.0;
   bool _isCanceled = false;
+  bool _isLocked = false;
 
   // Анимация для визуализации звука
   late AnimationController _pulseController;
@@ -102,52 +104,95 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   }
 
   void _initSpeech() async {
-    _speechEnabled = await _speechToText.initialize(
-      onError: (error) {
-        debugPrint('Speech recognition error: $error');
-        _showErrorSnackBar('Ошибка распознавания речи: ${error.errorMsg}');
-        setState(() {
-          _speechEnabled = false;
-          _isListening = false;
-        });
-        _stopAnimations();
-      },
-      onStatus: (status) {
-        debugPrint('Speech recognition status: $status');
-        if (status == 'notListening') {
+    try {
+      _speechEnabled = await _speechToText.initialize(
+        onError: (error) {
+          debugPrint('Speech recognition error: $error');
+          String errorMessage = 'Ошибка распознавания речи: ${error.errorMsg}';
+          
+          // Специальные сообщения для браузера
+          if (error.errorMsg.contains('not-allowed')) {
+            errorMessage = 'Доступ к микрофону запрещен. Разрешите доступ в браузере.';
+          } else if (error.errorMsg.contains('network')) {
+            errorMessage = 'Нет подключения к интернету. Речевое распознавание требует интернет.';
+          } else if (error.errorMsg.contains('no-speech')) {
+            errorMessage = 'Речь не обнаружена. Говорите ближе к микрофону.';
+          }
+          
+          _showErrorSnackBar(errorMessage);
           setState(() {
+            _speechEnabled = false;
             _isListening = false;
           });
           _stopAnimations();
-
-          // Автоматически перезапускаем прослушивание, если пользователь хочет продолжить
-          if (_shouldKeepListening) {
-            Future.delayed(const Duration(milliseconds: 500), () {
-              if (_shouldKeepListening && _speechEnabled) {
-                _startListening();
-              }
+        },
+        onStatus: (status) {
+          debugPrint('Speech recognition status: $status');
+          if (status == 'notListening') {
+            setState(() {
+              _isListening = false;
             });
-          }
-        }
-      },
-    );
+            _stopAnimations();
 
-    if (_speechEnabled) {
-      // Получаем список доступных языков
-      _availableLocales = await _speechToText.locales();
-      debugPrint('Available locales: ${_availableLocales.map((e) => '${e.localeId} - ${e.name}').toList()}');
-      
-      // Проверяем, доступен ли русский язык
-      bool hasRussian = _availableLocales.any((locale) => 
-        locale.localeId.startsWith('ru'));
-      
-      if (!hasRussian) {
-        // Если русского нет, используем английский
-        _currentLocale = 'en-US';
-        _showErrorSnackBar('Русский язык недоступен, используется английский');
+            // Автоматически перезапускаем прослушивание, если пользователь хочет продолжить
+            if (_shouldKeepListening) {
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (_shouldKeepListening && _speechEnabled) {
+                  _startListening();
+                }
+              });
+            }
+          }
+        },
+      );
+
+      if (_speechEnabled) {
+        // Получаем список доступных языков
+        _availableLocales = await _speechToText.locales();
+        debugPrint('Available locales: ${_availableLocales.map((e) => '${e.localeId} - ${e.name}').toList()}');
+        
+        // В браузере создаем список языков вручную, если система не предоставляет
+        if (_availableLocales.isEmpty) {
+          debugPrint('No locales from system, creating manual list for web...');
+          
+          // Добавляем основные языки для браузера
+          _availableLocales = [
+            LocaleName('en-US', 'English (United States)'),
+            LocaleName('ru-RU', 'Русский'),
+            LocaleName('en-GB', 'English (United Kingdom)'),
+            LocaleName('es-ES', 'Español'),
+            LocaleName('fr-FR', 'Français'),
+            LocaleName('de-DE', 'Deutsch'),
+            LocaleName('it-IT', 'Italiano'),
+            LocaleName('pt-BR', 'Português (Brasil)'),
+            LocaleName('zh-CN', '中文'),
+            LocaleName('ja-JP', '日本語'),
+            LocaleName('ko-KR', '한국어'),
+          ];
+          
+          _showInfoSnackBar('Браузер не предоставил список языков. Используется стандартный набор.');
+        }
+        
+        // Проверяем, доступен ли русский язык
+        bool hasRussian = _availableLocales.any((locale) => 
+          locale.localeId.toLowerCase().contains('ru'));
+        
+        if (hasRussian) {
+          _currentLocale = 'ru-RU';
+          _showInfoSnackBar('Русский язык настроен. Если распознавание не работает, проверьте язык браузера в настройках.');
+        } else {
+          _currentLocale = 'en-US';
+          _showInfoSnackBar('Русский язык не найден. Используется английский. Измените язык браузера на русский в настройках.');
+        }
+        
+        debugPrint('Using locale: $_currentLocale');
+        
+      } else {
+        _showErrorSnackBar('Распознавание речи недоступно. Проверьте:\n1. Используете HTTPS?\n2. Разрешен доступ к микрофону?\n3. Браузер поддерживает речевое распознавание?');
       }
-    } else {
-      _showErrorSnackBar('Распознавание речи недоступно на этом устройстве');
+    } catch (e) {
+      debugPrint('Error initializing speech: $e');
+      _showErrorSnackBar('Ошибка инициализации речевого распознавания: $e');
     }
     setState(() {});
   }
@@ -190,29 +235,38 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   }
 
   void _onSpeechResult(result) {
+    String newRecognizedWords = result.recognizedWords;
+    
+    // Предотвращаем дублирование только для промежуточных результатов
+    if (!result.finalResult && newRecognizedWords == _currentWords) {
+      return;
+    }
+    
     setState(() {
-      _currentWords = result.recognizedWords;
+      _currentWords = newRecognizedWords;
       _confidenceLevel = result.confidence;
-
-      // Обновляем поле ввода в реальном времени
-      if (_currentWords.isNotEmpty) {
-        String currentText = _textController.text;
-        // Удаляем последнее временное добавление, если есть
-        if (currentText.contains('[Слушаю...]')) {
-          currentText = currentText.replaceAll('[Слушаю...]', '');
-        }
-        _textController.text = '$currentText$_currentWords';
-        _textController.selection = TextSelection.fromPosition(
-          TextPosition(offset: _textController.text.length),
-        );
-      }
-
+      
+      // Если это финальный результат, добавляем к тексту
       if (result.finalResult && _currentWords.isNotEmpty) {
+        // Добавляем новый распознанный текст к существующему
+        String currentText = _textController.text;
+        
+        // Добавляем только новый текст, избегая дублирования
+        if (!currentText.endsWith(_currentWords)) {
+          _textController.text = '$currentText$_currentWords ';
+          _textController.selection = TextSelection.fromPosition(
+            TextPosition(offset: _textController.text.length),
+          );
+        }
+        
+        // Добавляем к истории
         _recognizedText += '${_currentWords.trim()}\n';
         _speechHistory.insert(0, _currentWords.trim());
         if (_speechHistory.length > 10) {
           _speechHistory.removeLast();
         }
+        
+        // Сбрасываем текущие слова после финального результата
         _currentWords = '';
       }
     });
@@ -240,13 +294,15 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   }
 
   // Методы для Telegram-style записи
-  void _onPanStart() {
+  void _onPanStart(DragStartDetails details) {
     if (!_speechEnabled) return;
 
     setState(() {
       _isPressed = true;
       _isCanceled = false;
+      _isLocked = false;
       _slideDistance = 0.0;
+      _slideUpDistance = 0.0;
     });
 
     _scaleController.forward();
@@ -254,21 +310,33 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
-    if (!_isPressed) return;
+    if (!_isPressed || _isLocked) return;
 
     setState(() {
+      // Горизонтальный свайп для отмены (влево)
       _slideDistance = -details.localPosition.dx;
+      if (_slideDistance < 0) _slideDistance = 0; // Не даем тянуть вправо
+      
       _isCanceled = _slideDistance > 100;
+
+      // Вертикальный свайп для блокировки (вверх)
+      _slideUpDistance = -details.localPosition.dy;
+      if (_slideUpDistance < 0) _slideUpDistance = 0; // Не даем тянуть вниз
+      
+      if (_slideUpDistance > 100 && !_isCanceled) {
+        _isLocked = true;
+        _isCanceled = false;
+      }
     });
 
-    if (_isCanceled) {
+    if (_isCanceled && !_isLocked) {
       _slideController.forward();
     } else {
       _slideController.reverse();
     }
   }
 
-  void _onPanEnd() {
+  void _onPanEnd(DragEndDetails details) {
     if (!_isPressed) return;
 
     setState(() {
@@ -278,27 +346,72 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     _scaleController.reverse();
     _slideController.reverse();
 
-    if (_isCanceled) {
-      // Отменяем запись
-      _textController.text = _textController.text.replaceAll(_currentWords, '');
+    if (_isCanceled && !_isLocked) {
+      // Отменяем запись - удаляем последний добавленный текст
+      String currentText = _textController.text;
+      if (_currentWords.isNotEmpty) {
+        // Удаляем промежуточный результат если он есть
+        if (currentText.endsWith(_currentWords)) {
+          _textController.text = currentText.substring(0, currentText.length - _currentWords.length);
+        }
+      }
       _stopListening();
-    } else {
-      // Завершаем запись
+      _currentWords = '';
+    } else if (!_isLocked) {
+      // Завершаем запись (если не заблокировано)
       _stopListening();
     }
+    // Если заблокировано - продолжаем запись
 
     setState(() {
       _slideDistance = 0.0;
+      _slideUpDistance = 0.0;
       _isCanceled = false;
     });
   }
 
+  void _toggleRecording() {
+    if (_isListening) {
+      _stopListening();
+      setState(() {
+        _isLocked = false;
+      });
+    } else {
+      _startListening();
+    }
+  }
+
   String _getLanguageName(String localeId) {
+    // Сначала проверяем, есть ли этот язык в доступных локалях
+    for (var locale in _availableLocales) {
+      if (locale.localeId == localeId) {
+        // Если есть, возвращаем его имя из системы
+        if (locale.name.isNotEmpty) {
+          return locale.name;
+        }
+      }
+    }
+    
+    // Если не найден или нет имени, возвращаем предопределенные названия
     switch (localeId) {
       case 'ru-RU':
         return 'Русский';
       case 'en-US':
         return 'English';
+      case 'es-ES':
+        return 'Español';
+      case 'fr-FR':
+        return 'Français';
+      case 'de-DE':
+        return 'Deutsch';
+      case 'it-IT':
+        return 'Italiano';
+      case 'zh-CN':
+        return '中文';
+      case 'ja-JP':
+        return '日本語';
+      case 'ko-KR':
+        return '한국어';
       default:
         return localeId;
     }
@@ -314,6 +427,16 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     );
   }
 
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -322,6 +445,28 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
         centerTitle: true,
         elevation: 0,
         actions: [
+          // Кнопка отладки для браузера
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            tooltip: 'Тестировать русский',
+            onPressed: () async {
+              // Принудительно пробуем русский язык
+              setState(() {
+                _currentLocale = 'ru-RU';
+              });
+              
+              // Добавляем русский в список если его нет
+              bool hasRussian = _availableLocales.any((locale) => 
+                locale.localeId.toLowerCase().contains('ru'));
+              
+              if (!hasRussian) {
+                _availableLocales.add(LocaleName('ru-RU', 'Русский (принудительно)'));
+              }
+              
+              _showInfoSnackBar('Принудительно установлен русский язык. Попробуйте записать.');
+              debugPrint('Forced Russian locale: ru-RU');
+            },
+          ),
           // Кнопка выбора языка
           PopupMenuButton<String>(
             icon: const Icon(Icons.language),
@@ -330,22 +475,55 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
               setState(() {
                 _currentLocale = localeId;
               });
-              _showErrorSnackBar('Выбран язык: ${_getLanguageName(localeId)}');
+              _showInfoSnackBar('Выбран язык: ${_getLanguageName(localeId)}');
             },
             itemBuilder: (BuildContext context) {
               List<PopupMenuEntry<String>> items = [];
               
-              // Добавляем русский язык, если доступен
-              if (_availableLocales.any((locale) => locale.localeId.startsWith('ru'))) {
+              // Добавляем все доступные языки
+              for (var locale in _availableLocales) {
+                String flag = '';
+                String displayName = locale.name;
+                
+                // Добавляем флаги для популярных языков
+                if (locale.localeId.startsWith('ru')) {
+                  flag = '🇷🇺';
+                  displayName = 'Русский';
+                } else if (locale.localeId.startsWith('en')) {
+                  flag = '🇺🇸';
+                  displayName = 'English';
+                } else if (locale.localeId.startsWith('es')) {
+                  flag = '🇪🇸';
+                } else if (locale.localeId.startsWith('fr')) {
+                  flag = '🇫🇷';
+                } else if (locale.localeId.startsWith('de')) {
+                  flag = '🇩🇪';
+                } else if (locale.localeId.startsWith('it')) {
+                  flag = '🇮🇹';
+                } else if (locale.localeId.startsWith('zh')) {
+                  flag = '🇨🇳';
+                } else if (locale.localeId.startsWith('ja')) {
+                  flag = '🇯🇵';
+                } else if (locale.localeId.startsWith('ko')) {
+                  flag = '🇰🇷';
+                }
+                
                 items.add(
                   PopupMenuItem<String>(
-                    value: 'ru-RU',
+                    value: locale.localeId,
                     child: Row(
                       children: [
-                        Text('🇷🇺'),
-                        const SizedBox(width: 8),
-                        const Text('Русский'),
-                        if (_currentLocale == 'ru-RU') 
+                        if (flag.isNotEmpty) ...[
+                          Text(flag),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            displayName.isNotEmpty ? displayName : locale.localeId,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (_currentLocale == locale.localeId) 
                           const Icon(Icons.check, size: 16),
                       ],
                     ),
@@ -353,21 +531,33 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                 );
               }
               
-              // Добавляем английский язык
-              items.add(
-                PopupMenuItem<String>(
-                  value: 'en-US',
-                  child: Row(
-                    children: [
-                      Text('🇺🇸'),
-                      const SizedBox(width: 8),
-                      const Text('English'),
-                      if (_currentLocale == 'en-US') 
-                        const Icon(Icons.check, size: 16),
-                    ],
-                  ),
-                ),
-              );
+              // Если нет доступных языков, добавляем стандартные для браузера
+              if (items.isEmpty) {
+                List<Map<String, String>> browserLanguages = [
+                  {'id': 'ru-RU', 'name': 'Русский', 'flag': '🇷🇺'},
+                  {'id': 'en-US', 'name': 'English', 'flag': '🇺🇸'},
+                  {'id': 'es-ES', 'name': 'Español', 'flag': '🇪🇸'},
+                  {'id': 'fr-FR', 'name': 'Français', 'flag': '🇫🇷'},
+                  {'id': 'de-DE', 'name': 'Deutsch', 'flag': '🇩🇪'},
+                ];
+                
+                for (var lang in browserLanguages) {
+                  items.add(
+                    PopupMenuItem<String>(
+                      value: lang['id']!,
+                      child: Row(
+                        children: [
+                          Text(lang['flag']!),
+                          const SizedBox(width: 8),
+                          Text(lang['name']!),
+                          if (_currentLocale == lang['id']) 
+                            const Icon(Icons.check, size: 16),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+              }
               
               return items;
             },
@@ -416,10 +606,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                Colors.blue.withOpacity(0.3),
-                Colors.purple.withOpacity(0.3)
-              ],
+              colors: _isLocked
+                  ? [Colors.green.withOpacity(0.3), Colors.teal.withOpacity(0.3)]
+                  : [Colors.blue.withOpacity(0.3), Colors.purple.withOpacity(0.3)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -430,11 +619,19 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
             children: [
               Transform.scale(
                 scale: _pulseAnimation.value,
-                child: const Icon(Icons.mic, color: Colors.white, size: 24),
+                child: Icon(
+                  _isLocked ? Icons.lock : Icons.mic, 
+                  color: Colors.white, 
+                  size: 24
+                ),
               ),
               const SizedBox(width: 12),
               Text(
-                _isCanceled ? 'Отпустите для отмены' : 'Говорите... (${_getLanguageName(_currentLocale)})',
+                _isCanceled 
+                    ? 'Отпустите для отмены' 
+                    : _isLocked 
+                        ? 'Запись заблокирована - нажмите для остановки'
+                        : 'Говорите... (${_getLanguageName(_currentLocale)})',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
@@ -519,9 +716,10 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
 
               // Telegram-style кнопка записи
               GestureDetector(
-                onPanStart: (_) => _onPanStart(),
+                onPanStart: _onPanStart,
                 onPanUpdate: _onPanUpdate,
-                onPanEnd: (_) => _onPanEnd(),
+                onPanEnd: _onPanEnd,
+                onTap: _isLocked ? _toggleRecording : null,
                 child: Transform.translate(
                   offset: Offset(_isPressed ? _slideDistance : 0, 0),
                   child: Transform.scale(
@@ -532,7 +730,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: _isListening
-                              ? [Colors.red, Colors.redAccent]
+                              ? (_isLocked ? [Colors.green, Colors.teal] : [Colors.red, Colors.redAccent])
                               : [Colors.blue, Colors.blueAccent],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -540,7 +738,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: (_isListening ? Colors.red : Colors.blue)
+                            color: (_isListening 
+                                ? (_isLocked ? Colors.green : Colors.red) 
+                                : Colors.blue)
                                 .withOpacity(0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
@@ -548,7 +748,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                         ],
                       ),
                       child: Icon(
-                        _isListening ? Icons.stop : Icons.mic,
+                        _isLocked 
+                            ? Icons.stop 
+                            : (_isListening ? Icons.mic : Icons.mic),
                         color: Colors.white,
                         size: 24,
                       ),
@@ -574,6 +776,33 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
+                  ),
+                ),
+
+              // Индикатор блокировки
+              if (_isPressed && _slideUpDistance > 50 && !_isCanceled)
+                Container(
+                  margin: const EdgeInsets.only(left: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.arrow_upward, size: 12, color: Colors.green),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isLocked ? 'Заблокировано' : 'Потяните вверх',
+                        style: const TextStyle(
+                          color: Colors.green,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],
