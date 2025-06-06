@@ -87147,8 +87147,10 @@ r=o.a
 q=B.d.ji(r.a)
 o.mS(0,r.tv(B.bm,B.zi,q.length!==0?q+" "+s:s))
 o.sof(A.pY(new A.aS(o.a.a.length,B.j)))}p.ch=n}p.ad(new A.am1(p))}else p.ad(new A.am2(p,n))},
-a5M(a,b){if(B.d.bI(b,a))return B.d.ji(B.d.cO(b,a.length))
-return b},
+a5M(a,b){var s
+if(B.d.bI(b,a)){s=B.d.ji(B.d.cO(b,a.length))
+if(s.length===0&&b===a)return b
+return s}return b},
 a3o(){this.ad(new A.alU(this))},
 aeT(){var s=this
 if(s.w||s.d.c)s.xv()
