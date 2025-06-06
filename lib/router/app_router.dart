@@ -10,13 +10,12 @@ part 'app_router.gr.dart';
 
 @AutoRouterConfig()
 class AppRouter extends _$AppRouter {
-
   @override
   List<AutoRoute> get routes => [
-    /// routes go here
-      AutoRoute(page: WelcomeRoute.page, path: "/"),
-      AutoRoute(page: TicTacRoute.page),
-      AutoRoute(page: QusetionRoute.page),
-      AutoRoute(page: SpeechToTextRoute.page, path: "/speech"),
-  ];
+        /// routes go here
+        AutoRoute(page: WelcomeRoute.page, path: "/"),
+        AutoRoute(page: TicTacRoute.page),
+        AutoRoute(page: QusetionRoute.page),
+        AutoRoute(page: SpeechToTextRoute.page, path: "/speech"),
+      ];
 }

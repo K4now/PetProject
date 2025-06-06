@@ -1,4 +1,3 @@
-
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_analog_clock/flutter_analog_clock.dart';
@@ -8,6 +7,7 @@ import 'package:test_project/welcome/data/card_class.dart';
 import 'package:test_project/welcome/widgets/welcome_screen.dart';
 
 import '../bloc/index.dart';
+
 @RoutePage()
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
@@ -31,17 +31,19 @@ class _WelcomePageState extends State<WelcomePage> {
         description: "Учишься определять время по аналоговым часам",
         child: const AnalogClock(),
         onPressed: () {
-         context.router.push(const QusetionRoute());
+          context.router.push(const QusetionRoute());
         },
       ),
-       CardClass(
+      CardClass(
         colorText: Colors.white,
         color: Colors.red.withOpacity(0.8),
         name: "Крестики нолики",
         description: "Игрулька на двоих",
-        child: const Card(child: Icon(Icons.close),),
+        child: const Card(
+          child: Icon(Icons.close),
+        ),
         onPressed: () {
-         context.router.push( TicTacRoute());
+          context.router.push(TicTacRoute());
         },
       ),
       CardClass(
@@ -51,11 +53,9 @@ class _WelcomePageState extends State<WelcomePage> {
         description: "Преобразование речи в текст для веб",
         child: const Card(child: Icon(Icons.mic)),
         onPressed: () {
-         context.router.push(const SpeechToTextRoute());
+          context.router.push(const SpeechToTextRoute());
         },
       ),
-     
-      
     ];
     super.initState();
   }

@@ -21,6 +21,10 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   double _confidenceLevel = 0.0;
   DateTime? _listeningStartTime;
   final List<String> _speechHistory = [];
+  
+  // Переменные для языков
+  List<LocaleName> _availableLocales = [];
+  String _currentLocale = 'ru-RU'; // Русский язык по умолчанию
 
   // Новые переменные для Telegram-style UI
   final TextEditingController _textController = TextEditingController();
@@ -128,7 +132,21 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       },
     );
 
-    if (!_speechEnabled) {
+    if (_speechEnabled) {
+      // Получаем список доступных языков
+      _availableLocales = await _speechToText.locales();
+      debugPrint('Available locales: ${_availableLocales.map((e) => '${e.localeId} - ${e.name}').toList()}');
+      
+      // Проверяем, доступен ли русский язык
+      bool hasRussian = _availableLocales.any((locale) => 
+        locale.localeId.startsWith('ru'));
+      
+      if (!hasRussian) {
+        // Если русского нет, используем английский
+        _currentLocale = 'en-US';
+        _showErrorSnackBar('Русский язык недоступен, используется английский');
+      }
+    } else {
       _showErrorSnackBar('Распознавание речи недоступно на этом устройстве');
     }
     setState(() {});
@@ -146,6 +164,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       pauseFor: const Duration(seconds: 10), // Увеличиваем паузу до остановки
       partialResults: true,
       cancelOnError: false, // Не отменяем при ошибках
+      localeId: _currentLocale, // Используем выбранный язык
       onSoundLevelChange: (level) {
         _updateWaveAnimation(level);
       },
@@ -274,6 +293,17 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     });
   }
 
+  String _getLanguageName(String localeId) {
+    switch (localeId) {
+      case 'ru-RU':
+        return 'Русский';
+      case 'en-US':
+        return 'English';
+      default:
+        return localeId;
+    }
+  }
+
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -292,6 +322,56 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
         centerTitle: true,
         elevation: 0,
         actions: [
+          // Кнопка выбора языка
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.language),
+            tooltip: 'Выбрать язык',
+            onSelected: (String localeId) {
+              setState(() {
+                _currentLocale = localeId;
+              });
+              _showErrorSnackBar('Выбран язык: ${_getLanguageName(localeId)}');
+            },
+            itemBuilder: (BuildContext context) {
+              List<PopupMenuEntry<String>> items = [];
+              
+              // Добавляем русский язык, если доступен
+              if (_availableLocales.any((locale) => locale.localeId.startsWith('ru'))) {
+                items.add(
+                  PopupMenuItem<String>(
+                    value: 'ru-RU',
+                    child: Row(
+                      children: [
+                        Text('🇷🇺'),
+                        const SizedBox(width: 8),
+                        const Text('Русский'),
+                        if (_currentLocale == 'ru-RU') 
+                          const Icon(Icons.check, size: 16),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              
+              // Добавляем английский язык
+              items.add(
+                PopupMenuItem<String>(
+                  value: 'en-US',
+                  child: Row(
+                    children: [
+                      Text('🇺🇸'),
+                      const SizedBox(width: 8),
+                      const Text('English'),
+                      if (_currentLocale == 'en-US') 
+                        const Icon(Icons.check, size: 16),
+                    ],
+                  ),
+                ),
+              );
+              
+              return items;
+            },
+          ),
           IconButton(
             onPressed: _clearText,
             icon: const Icon(Icons.clear_all),
@@ -354,7 +434,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
               ),
               const SizedBox(width: 12),
               Text(
-                _isCanceled ? 'Отпустите для отмены' : 'Говорите...',
+                _isCanceled ? 'Отпустите для отмены' : 'Говорите... (${_getLanguageName(_currentLocale)})',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
@@ -391,11 +471,11 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           hintText:
-              'Начните печатать или зажмите кнопку микрофона для записи голоса...',
+              'Начните печатать или зажмите кнопку микрофона для записи голоса (${_getLanguageName(_currentLocale)})...',
           border: InputBorder.none,
-          contentPadding: EdgeInsets.all(16),
+          contentPadding: const EdgeInsets.all(16),
         ),
         style: const TextStyle(fontSize: 16),
       ),
