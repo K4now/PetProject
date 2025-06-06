@@ -22,6 +22,8 @@ class _FavoriteWidgetState extends State<FavoriteWidget> {
   bool _speechEnabled = false;
   String _lastWords = '';
   bool _isListening = false;
+  List<LocaleName> _localeNames = [];
+  String _currentLocaleId = 'ru_RU';
 
   @override
   void initState() {
@@ -33,18 +35,71 @@ class _FavoriteWidgetState extends State<FavoriteWidget> {
     _speechEnabled = await _speechToText.initialize(
       onError: (error) {
         print('Speech recognition error: $error');
+        setState(() {
+          _speechEnabled = false;
+        });
       },
       onStatus: (status) {
         print('Speech recognition status: $status');
+        if (status == 'notListening') {
+          setState(() {
+            _isListening = false;
+          });
+        }
       },
     );
+
+    if (_speechEnabled) {
+      _localeNames = await _speechToText.locales();
+
+      // Ищем русские локали в порядке приоритета
+      List<String> preferredRussianLocales = [
+        'ru-RU',
+        'ru_RU',
+        'ru',
+        'ru-ru',
+        'russian'
+      ];
+
+      LocaleName? selectedLocale;
+
+      for (String preferred in preferredRussianLocales) {
+        selectedLocale = _localeNames.firstWhere(
+          (locale) =>
+              locale.localeId.toLowerCase().contains(preferred.toLowerCase()),
+          orElse: () => LocaleName('', ''),
+        );
+        if (selectedLocale.localeId.isNotEmpty) {
+          break;
+        }
+      }
+
+      if (selectedLocale != null && selectedLocale.localeId.isNotEmpty) {
+        _currentLocaleId = selectedLocale.localeId;
+        print('Found Russian locale: $_currentLocaleId');
+      } else {
+        // Если русской локали нет, используем первую доступную
+        if (_localeNames.isNotEmpty) {
+          _currentLocaleId = _localeNames.first.localeId;
+          print('No Russian locale found, using: $_currentLocaleId');
+        } else {
+          // Fallback на стандартную русскую локаль
+          _currentLocaleId = 'ru-RU';
+          print('No locales available, using fallback: $_currentLocaleId');
+        }
+      }
+
+      print(
+          'Available locales: ${_localeNames.map((l) => '${l.localeId} (${l.name})').join(', ')}');
+    }
+
     setState(() {});
   }
 
   void _startListening() async {
     await _speechToText.listen(
       onResult: _onSpeechResult,
-      localeId: 'ru_RU', // Русский язык
+      localeId: _currentLocaleId, // Используем проверенную локаль
       listenFor: const Duration(seconds: 30),
       pauseFor: const Duration(seconds: 3),
       partialResults: true,
@@ -129,22 +184,48 @@ class _FavoriteWidgetState extends State<FavoriteWidget> {
                         width: 1.0,
                       ),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          _speechEnabled ? Icons.mic : Icons.mic_off,
-                          color: _speechEnabled ? Colors.green : Colors.red,
+                        Row(
+                          children: [
+                            Icon(
+                              _speechEnabled ? Icons.mic : Icons.mic_off,
+                              color: _speechEnabled ? Colors.green : Colors.red,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _speechEnabled
+                                  ? 'Распознавание речи доступно'
+                                  : 'Распознавание речи недоступно',
+                              style: TextStyle(
+                                color:
+                                    _speechEnabled ? Colors.green : Colors.red,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _speechEnabled
-                              ? 'Распознавание речи доступно'
-                              : 'Распознавание речи недоступно',
-                          style: TextStyle(
-                            color: _speechEnabled ? Colors.green : Colors.red,
-                            fontWeight: FontWeight.w500,
+                        if (_speechEnabled) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Текущая локаль: $_currentLocaleId',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
                           ),
-                        ),
+                          if (_localeNames.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Доступные локали: ${_localeNames.length}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ],
                       ],
                     ),
                   ),
