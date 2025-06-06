@@ -21,19 +21,18 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   double _confidenceLevel = 0.0;
   DateTime? _listeningStartTime;
   final List<String> _speechHistory = [];
-  
+
   // Новые переменные для Telegram-style UI
   final TextEditingController _textController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isPressed = false;
-  double _buttonScale = 1.0;
   double _slideDistance = 0.0;
   bool _isCanceled = false;
 
   // Анимация для визуализации звука
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
-  
+
   // Анимации для Telegram-style кнопки
   late AnimationController _scaleController;
   late Animation<double> _scaleAnimation;
@@ -71,7 +70,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       parent: _pulseController,
       curve: Curves.easeInOut,
     ));
-    
+
     // Анимации для Telegram-style кнопки
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 150),
@@ -84,7 +83,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       parent: _scaleController,
       curve: Curves.easeOut,
     ));
-    
+
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -116,7 +115,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
             _isListening = false;
           });
           _stopAnimations();
-          
+
           // Автоматически перезапускаем прослушивание, если пользователь хочет продолжить
           if (_shouldKeepListening) {
             Future.delayed(const Duration(milliseconds: 500), () {
@@ -183,7 +182,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
         if (currentText.contains('[Слушаю...]')) {
           currentText = currentText.replaceAll('[Слушаю...]', '');
         }
-        _textController.text = '$currentText${_currentWords}';
+        _textController.text = '$currentText$_currentWords';
         _textController.selection = TextSelection.fromPosition(
           TextPosition(offset: _textController.text.length),
         );
@@ -202,18 +201,14 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
 
   void _startAnimations() {
     _pulseController.repeat(reverse: true);
-    _waveController.repeat();
   }
 
   void _stopAnimations() {
     _pulseController.stop();
-    _waveController.stop();
   }
 
   void _updateWaveAnimation(double level) {
-    if (_isListening) {
-      _waveController.animateTo(level / 10);
-    }
+    // Убираем для упрощения
   }
 
   void _clearText() {
@@ -228,25 +223,25 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   // Методы для Telegram-style записи
   void _onPanStart() {
     if (!_speechEnabled) return;
-    
+
     setState(() {
       _isPressed = true;
       _isCanceled = false;
       _slideDistance = 0.0;
     });
-    
+
     _scaleController.forward();
     _startListening();
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
     if (!_isPressed) return;
-    
+
     setState(() {
       _slideDistance = -details.localPosition.dx;
       _isCanceled = _slideDistance > 100;
     });
-    
+
     if (_isCanceled) {
       _slideController.forward();
     } else {
@@ -256,14 +251,14 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
 
   void _onPanEnd() {
     if (!_isPressed) return;
-    
+
     setState(() {
       _isPressed = false;
     });
-    
+
     _scaleController.reverse();
     _slideController.reverse();
-    
+
     if (_isCanceled) {
       // Отменяем запись
       _textController.text = _textController.text.replaceAll(_currentWords, '');
@@ -272,18 +267,11 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       // Завершаем запись
       _stopListening();
     }
-    
+
     setState(() {
       _slideDistance = 0.0;
       _isCanceled = false;
     });
-  }
-
-  void _copyToClipboard() {
-    if (_recognizedText.isNotEmpty) {
-      // В веб-версии можно использовать пакет clipboard или другие решения
-      _showSuccessSnackBar('Текст скопирован в буфер обмена');
-    }
   }
 
   void _showErrorSnackBar(String message) {
@@ -292,16 +280,6 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
         content: Text(message),
         backgroundColor: Colors.red,
         duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -325,7 +303,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
         children: [
           // Статус индикатор
           if (_isListening) _buildListeningIndicator(),
-          
+
           // Основная область с полем ввода
           Expanded(
             child: Padding(
@@ -337,7 +315,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                     child: _buildTextInput(),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Telegram-style панель ввода
                   _buildInputPanel(),
                 ],
@@ -358,7 +336,10 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Colors.blue.withOpacity(0.3), Colors.purple.withOpacity(0.3)],
+              colors: [
+                Colors.blue.withOpacity(0.3),
+                Colors.purple.withOpacity(0.3)
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -411,7 +392,8 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
         expands: true,
         textAlignVertical: TextAlignVertical.top,
         decoration: const InputDecoration(
-          hintText: 'Начните печатать или зажмите кнопку микрофона для записи голоса...',
+          hintText:
+              'Начните печатать или зажмите кнопку микрофона для записи голоса...',
           border: InputBorder.none,
           contentPadding: EdgeInsets.all(16),
         ),
@@ -452,9 +434,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                   icon: const Icon(Icons.send),
                   color: Colors.blue,
                 ),
-              
+
               const Spacer(),
-              
+
               // Telegram-style кнопка записи
               GestureDetector(
                 onPanStart: (_) => _onPanStart(),
@@ -478,7 +460,8 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: (_isListening ? Colors.red : Colors.blue).withOpacity(0.3),
+                            color: (_isListening ? Colors.red : Colors.blue)
+                                .withOpacity(0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -493,12 +476,13 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                   ),
                 ),
               ),
-              
+
               // Индикатор отмены
               if (_isPressed && _isCanceled)
                 Container(
                   margin: const EdgeInsets.only(left: 16),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.red.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -518,5 +502,4 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       },
     );
   }
-
 }
