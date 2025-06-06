@@ -1,6 +1,7 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:flutter/foundation.dart';
 
 @RoutePage()
 class SpeechToTextPage extends StatefulWidget {
@@ -16,9 +17,15 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   bool _speechEnabled = false;
   String _recognizedText = '';
   String _currentWords = '';
+  String _lastProcessedText =
+      ''; // Для предотвращения дублирования на мобильных
   bool _isListening = false;
   double _confidenceLevel = 0.0;
   final List<String> _speechHistory = [];
+
+  // Переменные для предотвращения дублирования на мобильных устройствах
+  DateTime? _lastUpdateTime;
+  static const Duration _debounceDelay = Duration(milliseconds: 100);
 
   // Переменные для языков
   List<LocaleName> _availableLocales = [];
@@ -180,6 +187,8 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       _isListening = true;
       _currentWords = '';
       _confidenceLevel = 0.0;
+      _lastProcessedText = ''; // Сбрасываем для мобильных устройств
+      _lastUpdateTime = null; // Сбрасываем время обновления
       // НЕ очищаем _textController.text, чтобы сохранить уже введённый текст
     });
     _startAnimations();
@@ -191,28 +200,86 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       _isListening = false;
     });
     _stopAnimations();
+
+    // На мобильных устройствах добавляем небольшую задержку для обработки финального результата
+    if (_isMobileDevice()) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      debugPrint('Mobile: Stop listening completed with delay');
+    }
   }
 
   void _onSpeechResult(result) {
     String newRecognizedWords = result.recognizedWords.trim();
+
+    // Для мобильных устройств добавляем дополнительную проверку
+    bool isMobile = _isMobileDevice();
+    final now = DateTime.now();
+
+    // Дебаунсинг для мобильных устройств
+    if (isMobile && _lastUpdateTime != null) {
+      final timeSinceLastUpdate = now.difference(_lastUpdateTime!);
+      if (timeSinceLastUpdate < _debounceDelay) {
+        debugPrint(
+            'Mobile: Debouncing - ignoring update (${timeSinceLastUpdate.inMilliseconds}ms)');
+        return;
+      }
+    }
+
+    // Отладочная информация
+    debugPrint(
+        'Speech result: isMobile=$isMobile, finalResult=${result.finalResult}, text="$newRecognizedWords", lastProcessed="$_lastProcessedText"');
+
     setState(() {
       _confidenceLevel = result.confidence;
+
       if (!result.finalResult) {
-        // Промежуточный результат - обновляем поле ввода
-        _currentWords = newRecognizedWords;
-        _textController.text = newRecognizedWords;
-        _textController.selection = TextSelection.fromPosition(
-          TextPosition(offset: _textController.text.length),
-        );
-      } else {
-        // Финальный результат - сохраняем только если текст изменился
-        if (newRecognizedWords.isNotEmpty &&
-            newRecognizedWords != _currentWords) {
+        // Промежуточный результат
+        if (isMobile) {
+          // На мобильных устройствах используем улучшенную проверку
+          if (_shouldUpdateTextOnMobile(newRecognizedWords, false)) {
+            _currentWords = newRecognizedWords;
+            _textController.text = newRecognizedWords;
+            _textController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _textController.text.length),
+            );
+            _lastProcessedText = newRecognizedWords;
+            _lastUpdateTime = now;
+            debugPrint('Mobile: Updated interim text to "$newRecognizedWords"');
+          }
+        } else {
+          // На десктопе работаем как обычно
           _currentWords = newRecognizedWords;
           _textController.text = newRecognizedWords;
           _textController.selection = TextSelection.fromPosition(
             TextPosition(offset: _textController.text.length),
           );
+          _lastUpdateTime = now;
+        }
+      } else {
+        // Финальный результат
+        if (newRecognizedWords.isNotEmpty) {
+          bool shouldUpdate = false;
+
+          if (isMobile) {
+            // На мобильных устройствах используем улучшенную проверку
+            shouldUpdate = _shouldUpdateTextOnMobile(newRecognizedWords, true);
+            debugPrint(
+                'Mobile: Final result check - shouldUpdate=$shouldUpdate');
+          } else {
+            // На десктопе обычная проверка
+            shouldUpdate = newRecognizedWords != _currentWords;
+          }
+
+          if (shouldUpdate) {
+            _currentWords = newRecognizedWords;
+            _textController.text = newRecognizedWords;
+            _textController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _textController.text.length),
+            );
+            _lastProcessedText = newRecognizedWords;
+            _lastUpdateTime = now;
+            debugPrint('Updated final text to "$newRecognizedWords"');
+          }
         }
       }
     });
@@ -230,10 +297,29 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     // Убираем для упрощения
   }
 
+  // Функция для определения мобильного устройства
+  bool _isMobileDevice() {
+    if (kIsWeb) {
+      // В веб-версии проверяем размер экрана и user agent
+      final mediaQuery = MediaQuery.of(context);
+      final screenWidth = mediaQuery.size.width;
+
+      // Считаем мобильным если ширина меньше 600px или это планшет/телефон
+      return screenWidth < 600 ||
+          mediaQuery.orientation == Orientation.portrait;
+    } else {
+      // На нативных платформах проверяем платформу
+      return Theme.of(context).platform == TargetPlatform.android ||
+          Theme.of(context).platform == TargetPlatform.iOS;
+    }
+  }
+
   void _clearText() {
     setState(() {
       _recognizedText = '';
       _currentWords = '';
+      _lastProcessedText = '';
+      _lastUpdateTime = null; // Сбрасываем время последнего обновления
       _speechHistory.clear();
       _textController.clear();
       _confidenceLevel = 0.0;
@@ -247,6 +333,76 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     } else {
       _startListening();
     }
+  }
+
+  // Специальный метод для обработки финального результата на мобильных устройствах
+  bool _shouldUpdateTextOnMobile(String newText, bool isFinalResult) {
+    if (newText.isEmpty) return false;
+
+    // Если это тот же текст, что мы уже обработали
+    if (newText == _lastProcessedText) return false;
+
+    // Если новый текст короче предыдущего (возможный баг мобильного API)
+    if (newText.length < _lastProcessedText.length) {
+      debugPrint(
+          'Mobile: Ignoring shorter text: "$newText" vs "$_lastProcessedText"');
+      return false;
+    }
+
+    // Если новый текст полностью содержится в текущем поле ввода
+    if (_textController.text.contains(newText)) {
+      debugPrint('Mobile: Text already present in field');
+      return false;
+    }
+
+    // Для финального результата добавляем дополнительные проверки
+    if (isFinalResult) {
+      // Проверяем, что финальный результат существенно отличается
+      final similarity = _calculateSimilarity(newText, _currentWords);
+      if (similarity > 0.9) {
+        debugPrint(
+            'Mobile: Final result too similar to current (${(similarity * 100).toInt()}%)');
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Простая функция для вычисления схожести строк
+  double _calculateSimilarity(String a, String b) {
+    if (a.isEmpty && b.isEmpty) return 1.0;
+    if (a.isEmpty || b.isEmpty) return 0.0;
+
+    final longer = a.length > b.length ? a : b;
+    final shorter = a.length > b.length ? b : a;
+
+    if (longer.isEmpty) return 1.0;
+
+    final editDistance = _levenshteinDistance(longer, shorter);
+    return (longer.length - editDistance) / longer.length;
+  }
+
+  // Алгоритм Левенштейна для вычисления расстояния редактирования
+  int _levenshteinDistance(String a, String b) {
+    final matrix =
+        List.generate(a.length + 1, (i) => List.filled(b.length + 1, 0));
+
+    for (int i = 0; i <= a.length; i++) matrix[i][0] = i;
+    for (int j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+    for (int i = 1; i <= a.length; i++) {
+      for (int j = 1; j <= b.length; j++) {
+        final cost = a[i - 1] == b[j - 1] ? 0 : 1;
+        matrix[i][j] = [
+          matrix[i - 1][j] + 1, // deletion
+          matrix[i][j - 1] + 1, // insertion
+          matrix[i - 1][j - 1] + cost // substitution
+        ].reduce((a, b) => a < b ? a : b);
+      }
+    }
+
+    return matrix[a.length][b.length];
   }
 
   String _getLanguageName(String localeId) {
@@ -309,10 +465,47 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Голосовые сообщения'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Голосовые сообщения'),
+            const SizedBox(width: 8),
+            // Индикатор типа устройства
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: _isMobileDevice() ? Colors.orange : Colors.green,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _isMobileDevice() ? 'Mobile' : 'Desktop',
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
         centerTitle: true,
         elevation: 0,
         actions: [
+          // Кнопка информации об устройстве
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'Информация об устройстве',
+            onPressed: () {
+              final isMobile = _isMobileDevice();
+              final deviceInfo = isMobile ? 'Мобильное устройство' : 'Десктоп';
+              final screenSize = MediaQuery.of(context).size;
+
+              _showInfoSnackBar('$deviceInfo\n'
+                  'Размер экрана: ${screenSize.width.toInt()}x${screenSize.height.toInt()}\n'
+                  'Платформа: ${kIsWeb ? "Web" : Theme.of(context).platform.name}\n'
+                  'Язык: ${_getLanguageName(_currentLocale)}');
+            },
+          ),
           // Кнопка отладки для браузера
           IconButton(
             icon: const Icon(Icons.bug_report),
@@ -434,6 +627,21 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
               return items;
             },
           ),
+          // Кнопка сброса речевого движка (особенно для мобильных)
+          if (_isMobileDevice())
+            IconButton(
+              onPressed: () async {
+                // Полный сброс речевого движка
+                await _speechToText.stop();
+                _clearText();
+                await Future.delayed(const Duration(milliseconds: 500));
+                _initSpeech();
+                _showInfoSnackBar(
+                    'Речевой движок перезапущен (для мобильных устройств)');
+              },
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Перезапустить речевой движок',
+            ),
           IconButton(
             onPressed: _clearText,
             icon: const Icon(Icons.clear_all),
@@ -586,8 +794,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                       if (textToSend.isNotEmpty) {
                         setState(() {
                           // Проверяем, не добавляли ли мы уже этот текст
-                          if (_recognizedText.isEmpty || !_recognizedText.endsWith(textToSend)) {
-                            _recognizedText += '${textToSend}\n';
+                          if (_recognizedText.isEmpty ||
+                              !_recognizedText.endsWith(textToSend)) {
+                            _recognizedText += '$textToSend\n';
                           }
                           _textController.clear();
                           _currentWords = '';
