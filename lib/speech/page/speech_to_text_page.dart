@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
@@ -32,6 +34,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   // Анимация для визуализации звука
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+
+  // Для анимации распознавания
+  bool _isRecognizing = false;
 
   @override
   void initState() {
@@ -180,7 +185,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
         listenFor: const Duration(minutes: 10),
         pauseFor: const Duration(seconds: 3),
         listenOptions: SpeechListenOptions(
-          partialResults: false,
+          partialResults: false, // теперь промежуточные результаты включены
           cancelOnError: false,
         ),
       );
@@ -221,33 +226,25 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     }
   }
 
-  String _lastFinalResult = '';
-
   void _onSpeechResult(SpeechRecognitionResult result) {
     final recognized = result.recognizedWords.trim();
-
-    if (result.finalResult) {
-      if (recognized.isNotEmpty) {
-        final newPart = _getDeltaText(_lastFinalResult, recognized);
-        if (newPart.isNotEmpty) {
-          final existing = _textController.text.trim();
-          final nextText = existing.isNotEmpty ? '$existing $newPart' : newPart;
-
-          _textController.text = nextText;
-          _textController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _textController.text.length),
-          );
-        }
-        _lastFinalResult = recognized;
-      }
-      setState(() {
-        _currentWords = '';
-      });
-    } else {
-      setState(() {
+    if (recognized.isEmpty) return;
+    setState(() {
+      _confidenceLevel = result.confidence;
+      if (!result.finalResult) {
+        // Промежуточные результаты не отображаем в поле
         _currentWords = recognized;
-      });
-    }
+        _isRecognizing = true;
+      } else {
+        // Финальный результат — вставляем в поле
+        _textController.text = recognized;
+        _textController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _textController.text.length),
+        );
+        _currentWords = '';
+        _isRecognizing = false;
+      }
+    });
   }
 
   String _getDeltaText(String previous, String current) {
@@ -527,8 +524,8 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
             gradient: LinearGradient(
               colors: _isListening
                   ? [
-                      Colors.red.withOpacity(0.3),
-                      Colors.redAccent.withOpacity(0.3)
+                      Colors.red.withOpacity(0.5),
+                      Colors.redAccent.withOpacity(0.7)
                     ]
                   : [
                       Colors.blue.withOpacity(0.3),
@@ -542,15 +539,31 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Transform.scale(
-                scale: _pulseAnimation.value,
-                child: Icon(_isListening ? Icons.mic : Icons.mic_none,
-                    color: Colors.white, size: 24),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  Transform.scale(
+                    scale: _pulseAnimation.value,
+                    child: Icon(_isListening ? Icons.mic : Icons.mic_none,
+                        color: Colors.white, size: 32),
+                  ),
+                  if (_isRecognizing)
+                    const Positioned(
+                      right: -24,
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: AILoadingAnimation(),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(width: 12),
               Text(
                 _isListening
-                    ? 'Говорите... (${_getLanguageName(_currentLocale)})'
+                    ? (_isRecognizing
+                        ? 'Распознавание...'
+                        : 'Говорите... (${_getLanguageName(_currentLocale)})')
                     : 'Нажмите, чтобы начать запись',
                 style: const TextStyle(
                   color: Colors.white,
@@ -576,26 +589,73 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   }
 
   Widget _buildTextInput() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.grey.withOpacity(0.05),
-      ),
-      child: TextField(
-        controller: _textController,
-        focusNode: _focusNode,
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        decoration: InputDecoration(
-          hintText:
-              'Начните печатать или зажмите кнопку микрофона для записи голоса (${_getLanguageName(_currentLocale)})...',
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(16),
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.withOpacity(0.3)),
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.grey.withOpacity(0.05),
+          ),
+          child: TextField(
+            controller: _textController,
+            focusNode: _focusNode,
+            maxLines: null,
+            expands: true,
+            textAlignVertical: TextAlignVertical.top,
+            decoration: InputDecoration(
+              hintText:
+                  'Начните печатать или зажмите кнопку микрофона для записи голоса ('
+                  '${_getLanguageName(_currentLocale)})...',
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.all(16),
+            ),
+            style: const TextStyle(fontSize: 16),
+          ),
         ),
-        style: const TextStyle(fontSize: 16),
-      ),
+
+        // ЭФФЕКТ ИИ при распознавании
+        if (_isRecognizing)
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Переливающийся градиентный фон
+                  const AnimatedGradientBackground(),
+
+                  // Туман + блик
+                  BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      color: Colors.white.withOpacity(0.2),
+                    ),
+                  ),
+
+                  // Центр – анимация загрузки и текст
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const AILoadingAnimation(),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Обработка речи...',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -682,6 +742,131 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
               ],
             ),
           ],
+        );
+      },
+    );
+  }
+}
+
+class AILoadingAnimation extends StatefulWidget {
+  const AILoadingAnimation({super.key});
+
+  @override
+  State<AILoadingAnimation> createState() => _AILoadingAnimationState();
+}
+
+class _AILoadingAnimationState extends State<AILoadingAnimation>
+    with TickerProviderStateMixin {
+  late AnimationController _rotationController;
+  late AnimationController _dotsController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController =
+        AnimationController(vsync: this, duration: const Duration(seconds: 2))
+          ..repeat();
+    _dotsController =
+        AnimationController(vsync: this, duration: const Duration(seconds: 1))
+          ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    _dotsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RotationTransition(
+      turns: _rotationController,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(3, (index) {
+          return ScaleTransition(
+            scale: Tween<double>(begin: 0.6, end: 1.2).animate(
+              CurvedAnimation(
+                parent: _dotsController,
+                curve: Interval(index * 0.2, 1.0, curve: Curves.easeInOut),
+              ),
+            ),
+            child: Container(
+              width: 10,
+              height: 10,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: Colors.deepPurpleAccent,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.deepPurple.withOpacity(0.5),
+                    blurRadius: 6,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class AnimatedGradientBackground extends StatefulWidget {
+  const AnimatedGradientBackground({super.key});
+
+  @override
+  State<AnimatedGradientBackground> createState() =>
+      _AnimatedGradientBackgroundState();
+}
+
+class _AnimatedGradientBackgroundState extends State<AnimatedGradientBackground>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Color?> _color1;
+  late Animation<Color?> _color2;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..repeat(reverse: true);
+
+    _color1 = ColorTween(
+      begin: Colors.deepPurple.shade700,
+      end: Colors.indigo.shade900,
+    ).animate(_controller);
+
+    _color2 = ColorTween(
+      begin: Colors.blueAccent.shade400,
+      end: Colors.purpleAccent.shade700,
+    ).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [_color1.value!, _color2.value!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
         );
       },
     );
