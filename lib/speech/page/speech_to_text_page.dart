@@ -17,9 +17,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   String _recognizedText = '';
   String _currentWords = '';
   bool _isListening = false;
-  bool _shouldKeepListening = false;
   double _confidenceLevel = 0.0;
-  DateTime? _listeningStartTime;
   final List<String> _speechHistory = [];
 
   // Переменные для языков
@@ -47,7 +45,6 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
 
   @override
   void dispose() {
-    _shouldKeepListening = false;
     _speechToText.stop();
     _pulseController.dispose();
     _textController.dispose();
@@ -181,16 +178,14 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
 
     setState(() {
       _isListening = true;
-      _shouldKeepListening = true; // Включаем автоматический перезапуск
-      _listeningStartTime = DateTime.now(); // Записываем время начала
       _currentWords = '';
+      _confidenceLevel = 0.0;
+      // НЕ очищаем _textController.text, чтобы сохранить уже введённый текст
     });
     _startAnimations();
   }
 
   void _stopListening() async {
-    _shouldKeepListening = false; // Отключаем автоматический перезапуск
-    _listeningStartTime = null; // Сбрасываем время начала
     await _speechToText.stop();
     setState(() {
       _isListening = false;
@@ -203,12 +198,23 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     setState(() {
       _confidenceLevel = result.confidence;
       if (!result.finalResult) {
+        // Промежуточный результат - обновляем поле ввода
+        _currentWords = newRecognizedWords;
         _textController.text = newRecognizedWords;
         _textController.selection = TextSelection.fromPosition(
           TextPosition(offset: _textController.text.length),
         );
+      } else {
+        // Финальный результат - сохраняем только если текст изменился
+        if (newRecognizedWords.isNotEmpty &&
+            newRecognizedWords != _currentWords) {
+          _currentWords = newRecognizedWords;
+          _textController.text = newRecognizedWords;
+          _textController.selection = TextSelection.fromPosition(
+            TextPosition(offset: _textController.text.length),
+          );
+        }
       }
-      // Финальный результат не добавляем никуда
     });
   }
 
@@ -230,6 +236,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       _currentWords = '';
       _speechHistory.clear();
       _textController.clear();
+      _confidenceLevel = 0.0;
     });
   }
 
@@ -575,10 +582,17 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                 if (_textController.text.isNotEmpty && !_isListening)
                   IconButton(
                     onPressed: () {
-                      setState(() {
-                        _recognizedText += '${_textController.text}\n';
-                        _textController.clear();
-                      });
+                      String textToSend = _textController.text.trim();
+                      if (textToSend.isNotEmpty) {
+                        setState(() {
+                          // Проверяем, не добавляли ли мы уже этот текст
+                          if (_recognizedText.isEmpty || !_recognizedText.endsWith(textToSend)) {
+                            _recognizedText += '${textToSend}\n';
+                          }
+                          _textController.clear();
+                          _currentWords = '';
+                        });
+                      }
                     },
                     icon: const Icon(Icons.send),
                     color: Colors.blue,
