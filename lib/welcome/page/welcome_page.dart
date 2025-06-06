@@ -44,6 +44,16 @@ class _WelcomePageState extends State<WelcomePage> {
          context.router.push( TicTacRoute());
         },
       ),
+      CardClass(
+        colorText: Colors.white,
+        color: Colors.blue.withOpacity(0.8),
+        name: "Распознавание речи",
+        description: "Преобразование речи в текст для веб",
+        child: const Card(child: Icon(Icons.mic)),
+        onPressed: () {
+         context.router.push(const SpeechToTextRoute());
+        },
+      ),
      
       
     ];

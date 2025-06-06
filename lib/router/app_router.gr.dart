@@ -21,6 +21,12 @@ abstract class _$AppRouter extends RootStackRouter {
         child: const QusetionPage(),
       );
     },
+    SpeechToTextRoute.name: (routeData) {
+      return AutoRoutePage<dynamic>(
+        routeData: routeData,
+        child: const SpeechToTextPage(),
+      );
+    },
     TicTacRoute.name: (routeData) {
       final args = routeData.argsAs<TicTacRouteArgs>(
           orElse: () => const TicTacRouteArgs());
@@ -48,6 +54,20 @@ class QusetionRoute extends PageRouteInfo<void> {
         );
 
   static const String name = 'QusetionRoute';
+
+  static const PageInfo<void> page = PageInfo<void>(name);
+}
+
+/// generated route for
+/// [SpeechToTextPage]
+class SpeechToTextRoute extends PageRouteInfo<void> {
+  const SpeechToTextRoute({List<PageRouteInfo>? children})
+      : super(
+          SpeechToTextRoute.name,
+          initialChildren: children,
+        );
+
+  static const String name = 'SpeechToTextRoute';
 
   static const PageInfo<void> page = PageInfo<void>(name);
 }
