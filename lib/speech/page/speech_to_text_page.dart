@@ -229,19 +229,16 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       if (recognized.isNotEmpty) {
         final newPart = _getDeltaText(_lastFinalResult, recognized);
         if (newPart.isNotEmpty) {
-          final updatedText = _textController.text.trim();
-          final nextText =
-              updatedText.isNotEmpty ? '$updatedText $newPart' : newPart;
+          final existing = _textController.text.trim();
+          final nextText = existing.isNotEmpty ? '$existing $newPart' : newPart;
 
           _textController.text = nextText;
           _textController.selection = TextSelection.fromPosition(
             TextPosition(offset: _textController.text.length),
           );
         }
-
         _lastFinalResult = recognized;
       }
-
       setState(() {
         _currentWords = '';
       });
@@ -254,8 +251,15 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
 
   String _getDeltaText(String previous, String current) {
     if (current.startsWith(previous)) {
-      return current.substring(previous.length).trim();
+      final delta = current.substring(previous.length).trim();
+      // Если delta пустое, но current == previous — значит ты реально повторил фразу,
+      // возвращаем её целиком, чтобы добавить повтор
+      if (delta.isEmpty && current == previous) {
+        return current;
+      }
+      return delta;
     }
+    // Полностью новая строка — просто возвращаем всю
     return current;
   }
 
