@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -38,7 +38,13 @@
 
   <script>
     // The value below is injected by flutter build, do not touch.
-    const serviceWorkerVersion = "1996846235";
+    const serviceWorkerVersion = "2230279074";
+    
+    // Настройка для русского языка в Web Speech API
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      // Устанавливаем язык по умолчанию для распознавания речи
+      window.speechRecognitionLang = 'ru-RU';
+    }
   </script>
 
   <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
