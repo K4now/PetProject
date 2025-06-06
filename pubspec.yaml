@@ -20,7 +20,8 @@ dependencies:
   flutter_launcher_icons: ^0.13.1
   auto_route: ^8.0.3
   telegram_web_app: ^0.3.3
-
+  speech_to_text: ^7.0.0
+  permission_handler: ^11.0.1
 
 flutter_launcher_icons:
   android: "launcher_icon"
