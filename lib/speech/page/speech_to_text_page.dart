@@ -164,7 +164,6 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
       _showErrorSnackBar('Распознавание речи не инициализировано');
       return;
     }
-    // Если уже слушаем — не запускаем повторно
     if (_isListening || _speechToText.isListening) {
       return;
     }
@@ -174,14 +173,16 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     try {
       await _speechToText.listen(
         onResult: _onSpeechResult,
-        listenFor: const Duration(minutes: 10),
-        pauseFor: const Duration(seconds: 3),
-        partialResults: true,
-        cancelOnError: false,
         localeId: _currentLocale,
         onSoundLevelChange: (level) {
           _updateWaveAnimation(level);
         },
+        listenFor: const Duration(minutes: 10),
+        pauseFor: const Duration(seconds: 3),
+        listenOptions: SpeechListenOptions(
+          partialResults: false,
+          cancelOnError: false,
+        ),
       );
       setState(() {
         _isListening = true;
