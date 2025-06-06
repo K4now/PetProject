@@ -29,21 +29,10 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   // Новые переменные для Telegram-style UI
   final TextEditingController _textController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  bool _isPressed = false;
-  double _slideDistance = 0.0;
-  double _slideUpDistance = 0.0;
-  bool _isCanceled = false;
-  bool _isLocked = false;
 
   // Анимация для визуализации звука
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
-
-  // Анимации для Telegram-style кнопки
-  late AnimationController _scaleController;
-  late Animation<double> _scaleAnimation;
-  late AnimationController _slideController;
-  late Animation<double> _slideAnimation;
 
   @override
   void initState() {
@@ -61,8 +50,6 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     _shouldKeepListening = false;
     _speechToText.stop();
     _pulseController.dispose();
-    _scaleController.dispose();
-    _slideController.dispose();
     _textController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -79,31 +66,6 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     ).animate(CurvedAnimation(
       parent: _pulseController,
       curve: Curves.easeInOut,
-    ));
-
-    // Анимации для Telegram-style кнопки
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 150),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.1,
-    ).animate(CurvedAnimation(
-      parent: _scaleController,
-      curve: Curves.easeOut,
-    ));
-
-    _slideController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _slideAnimation = Tween<double>(
-      begin: 0.0,
-      end: 100.0,
-    ).animate(CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.easeOut,
     ));
   }
 
@@ -249,20 +211,19 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     setState(() {
       _confidenceLevel = result.confidence;
       if (!result.finalResult) {
-        // Динамически обновляем текстовое поле без дублирования
+        // Показываем только текущий результат
         _textController.text = newRecognizedWords;
         _textController.selection = TextSelection.fromPosition(
           TextPosition(offset: _textController.text.length),
         );
-        _currentWords = newRecognizedWords;
       } else if (result.finalResult && newRecognizedWords.isNotEmpty) {
-        // Финальный результат: просто оставляем текст, не добавляем повторно
+        // Финальный результат: добавляем только в историю, поле не меняем
         _recognizedText += '${newRecognizedWords.trim()}\n';
         _speechHistory.insert(0, newRecognizedWords.trim());
         if (_speechHistory.length > 10) {
           _speechHistory.removeLast();
         }
-        _currentWords = '';
+        // Не меняем _textController.text!
       }
     });
   }
@@ -289,89 +250,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   }
 
   // Методы для Telegram-style записи
-  void _onPanStart(DragStartDetails details) {
-    if (!_speechEnabled) return;
-
-    setState(() {
-      _isPressed = true;
-      _isCanceled = false;
-      _isLocked = false;
-      _slideDistance = 0.0;
-      _slideUpDistance = 0.0;
-    });
-
-    _scaleController.forward();
-    _startListening();
-  }
-
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (!_isPressed || _isLocked) return;
-
-    setState(() {
-      // Горизонтальный свайп для отмены (влево)
-      _slideDistance = -details.localPosition.dx;
-      if (_slideDistance < 0) _slideDistance = 0; // Не даем тянуть вправо
-
-      _isCanceled = _slideDistance > 100;
-
-      // Вертикальный свайп для блокировки (вверх)
-      _slideUpDistance = -details.localPosition.dy;
-      if (_slideUpDistance < 0) _slideUpDistance = 0; // Не даем тянуть вниз
-
-      if (_slideUpDistance > 100 && !_isCanceled) {
-        _isLocked = true;
-        _isCanceled = false;
-      }
-    });
-
-    if (_isCanceled && !_isLocked) {
-      _slideController.forward();
-    } else {
-      _slideController.reverse();
-    }
-  }
-
-  void _onPanEnd(DragEndDetails details) {
-    if (!_isPressed) return;
-
-    setState(() {
-      _isPressed = false;
-    });
-
-    _scaleController.reverse();
-    _slideController.reverse();
-
-    if (_isCanceled && !_isLocked) {
-      // Отменяем запись - удаляем последний добавленный текст
-      String currentText = _textController.text;
-      if (_currentWords.isNotEmpty) {
-        // Удаляем промежуточный результат если он есть
-        if (currentText.endsWith(_currentWords)) {
-          _textController.text = currentText.substring(
-              0, currentText.length - _currentWords.length);
-        }
-      }
-      _stopListening();
-      _currentWords = '';
-    } else if (!_isLocked) {
-      // Завершаем запись (если не заблокировано)
-      _stopListening();
-    }
-    // Если заблокировано - продолжаем запись
-
-    setState(() {
-      _slideDistance = 0.0;
-      _slideUpDistance = 0.0;
-      _isCanceled = false;
-    });
-  }
-
   void _toggleRecording() {
     if (_isListening) {
       _stopListening();
-      setState(() {
-        _isLocked = false;
-      });
     } else {
       _startListening();
     }
@@ -606,10 +487,10 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
           margin: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: _isLocked
+              colors: _isListening
                   ? [
-                      Colors.green.withOpacity(0.3),
-                      Colors.teal.withOpacity(0.3)
+                      Colors.red.withOpacity(0.3),
+                      Colors.redAccent.withOpacity(0.3)
                     ]
                   : [
                       Colors.blue.withOpacity(0.3),
@@ -625,16 +506,14 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
             children: [
               Transform.scale(
                 scale: _pulseAnimation.value,
-                child: Icon(_isLocked ? Icons.lock : Icons.mic,
+                child: Icon(_isListening ? Icons.mic : Icons.mic_none,
                     color: Colors.white, size: 24),
               ),
               const SizedBox(width: 12),
               Text(
-                _isCanceled
-                    ? 'Отпустите для отмены'
-                    : _isLocked
-                        ? 'Запись заблокирована - нажмите для остановки'
-                        : 'Говорите... (${_getLanguageName(_currentLocale)})',
+                _isListening
+                    ? 'Говорите... (${_getLanguageName(_currentLocale)})'
+                    : 'Нажмите, чтобы начать запись',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
@@ -684,135 +563,78 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
 
   Widget _buildInputPanel() {
     return AnimatedBuilder(
-      animation: Listenable.merge([_scaleAnimation, _slideAnimation]),
+      animation: _pulseAnimation,
       builder: (context, child) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(25),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              // Кнопка отправки (когда есть текст)
-              if (_textController.text.isNotEmpty && !_isListening)
-                IconButton(
-                  onPressed: () {
-                    // Добавляем текст к общему результату
-                    setState(() {
-                      _recognizedText += '${_textController.text}\n';
-                      _textController.clear();
-                    });
-                  },
-                  icon: const Icon(Icons.send),
-                  color: Colors.blue,
-                ),
-
-              const Spacer(),
-
-              // Telegram-style кнопка записи
-              GestureDetector(
-                onPanStart: _onPanStart,
-                onPanUpdate: _onPanUpdate,
-                onPanEnd: _onPanEnd,
-                onTap: _isLocked ? _toggleRecording : null,
-                child: Transform.translate(
-                  offset: Offset(_isPressed ? _slideDistance : 0, 0),
-                  child: Transform.scale(
-                    scale: _isPressed ? _scaleAnimation.value : 1.0,
-                    child: Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: _isListening
-                              ? (_isLocked
-                                  ? [Colors.green, Colors.teal]
-                                  : [Colors.red, Colors.redAccent])
-                              : [Colors.blue, Colors.blueAccent],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: (_isListening
-                                    ? (_isLocked ? Colors.green : Colors.red)
-                                    : Colors.blue)
-                                .withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        _isLocked
-                            ? Icons.stop
-                            : (_isListening ? Icons.mic : Icons.mic),
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
+        return Column(
+          children: [
+            // Bubble с текущим распознанным текстом
+            if (_isListening && _textController.text.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Text(
+                    _textController.text,
+                    style: const TextStyle(fontSize: 16, color: Colors.black87),
                   ),
                 ),
               ),
-
-              // Индикатор отмены
-              if (_isPressed && _isCanceled)
-                Container(
-                  margin: const EdgeInsets.only(left: 16),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+            Row(
+              children: [
+                // Кнопка отправки (когда есть текст и не идёт запись)
+                if (_textController.text.isNotEmpty && !_isListening)
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _recognizedText += '${_textController.text}\n';
+                        _textController.clear();
+                      });
+                    },
+                    icon: const Icon(Icons.send),
+                    color: Colors.blue,
                   ),
-                  child: const Text(
-                    'Отменить',
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                const Spacer(),
+                // Кнопка записи с пульсацией
+                GestureDetector(
+                  onTap: _toggleRecording,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 56 * (_isListening ? _pulseAnimation.value : 1.0),
+                    height: 56 * (_isListening ? _pulseAnimation.value : 1.0),
+                    curve: Curves.easeInOut,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: _isListening
+                            ? [Colors.red, Colors.redAccent]
+                            : [Colors.blue, Colors.blueAccent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (_isListening ? Colors.red : Colors.blue)
+                              .withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none,
+                      color: Colors.white,
+                      size: 28,
                     ),
                   ),
                 ),
-
-              // Индикатор блокировки
-              if (_isPressed && _slideUpDistance > 50 && !_isCanceled)
-                Container(
-                  margin: const EdgeInsets.only(left: 16),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.arrow_upward,
-                          size: 12, color: Colors.green),
-                      const SizedBox(width: 4),
-                      Text(
-                        _isLocked ? 'Заблокировано' : 'Потяните вверх',
-                        style: const TextStyle(
-                          color: Colors.green,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
+              ],
+            ),
+          ],
         );
       },
     );
