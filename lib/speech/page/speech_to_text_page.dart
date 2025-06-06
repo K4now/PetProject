@@ -236,37 +236,22 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
 
   void _onSpeechResult(result) {
     String newRecognizedWords = result.recognizedWords;
-    
-    // Предотвращаем дублирование только для промежуточных результатов
-    if (!result.finalResult && newRecognizedWords == _currentWords) {
-      return;
-    }
-    
     setState(() {
-      _currentWords = newRecognizedWords;
       _confidenceLevel = result.confidence;
-      
-      // Если это финальный результат, добавляем к тексту
-      if (result.finalResult && _currentWords.isNotEmpty) {
-        // Добавляем новый распознанный текст к существующему
-        String currentText = _textController.text;
-        
-        // Добавляем только новый текст, избегая дублирования
-        if (!currentText.endsWith(_currentWords)) {
-          _textController.text = '$currentText$_currentWords ';
-          _textController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _textController.text.length),
-          );
-        }
-        
-        // Добавляем к истории
-        _recognizedText += '${_currentWords.trim()}\n';
-        _speechHistory.insert(0, _currentWords.trim());
+      if (!result.finalResult) {
+        // Динамически обновляем текстовое поле без дублирования
+        _textController.text = newRecognizedWords;
+        _textController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _textController.text.length),
+        );
+        _currentWords = newRecognizedWords;
+      } else if (result.finalResult && newRecognizedWords.isNotEmpty) {
+        // Финальный результат: просто оставляем текст, не добавляем повторно
+        _recognizedText += '${newRecognizedWords.trim()}\n';
+        _speechHistory.insert(0, newRecognizedWords.trim());
         if (_speechHistory.length > 10) {
           _speechHistory.removeLast();
         }
-        
-        // Сбрасываем текущие слова после финального результата
         _currentWords = '';
       }
     });
