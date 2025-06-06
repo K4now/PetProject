@@ -167,6 +167,9 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     if (_isListening || _speechToText.isListening) {
       return;
     }
+    setState(() {
+      _recognizedText = '';
+    });
     try {
       await _speechToText.listen(
         onResult: _onSpeechResult,
@@ -221,22 +224,19 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     setState(() {
       _confidenceLevel = result.confidence;
       if (result.finalResult) {
-        // Финальный результат - добавляем в поле ввода
+        // Финальный результат - добавляем в поле ввода только если его там ещё нет
         if (newRecognizedWords.isNotEmpty) {
-          String existingText = _textController.text;
-
-          // Добавляем текст в поле ввода
-          if (existingText.isNotEmpty && !existingText.endsWith(' ')) {
-            _textController.text = '$existingText $newRecognizedWords';
-          } else {
-            _textController.text = existingText + newRecognizedWords;
+          String existingText = _textController.text.trim();
+          // Проверяем, не заканчивается ли уже текст этим результатом
+          if (!existingText.endsWith(newRecognizedWords)) {
+            String newText = existingText.isNotEmpty
+                ? ('$existingText $newRecognizedWords')
+                : newRecognizedWords;
+            _textController.text = newText;
+            _textController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _textController.text.length),
+            );
           }
-
-          // Устанавливаем курсор в конец
-          _textController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _textController.text.length),
-          );
-
           // Очищаем промежуточный результат
           _currentWords = '';
         }
