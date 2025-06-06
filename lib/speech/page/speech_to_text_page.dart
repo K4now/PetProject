@@ -1,5 +1,6 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 @RoutePage()
@@ -219,32 +220,43 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
     }
   }
 
-  void _onSpeechResult(result) {
-    String newRecognizedWords = result.recognizedWords.trim();
-    setState(() {
-      _confidenceLevel = result.confidence;
-      if (result.finalResult) {
-        // Финальный результат - добавляем в поле ввода только если его там ещё нет
-        if (newRecognizedWords.isNotEmpty) {
-          String existingText = _textController.text.trim();
-          // Проверяем, не заканчивается ли уже текст этим результатом
-          if (!existingText.endsWith(newRecognizedWords)) {
-            String newText = existingText.isNotEmpty
-                ? ('$existingText $newRecognizedWords')
-                : newRecognizedWords;
-            _textController.text = newText;
-            _textController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _textController.text.length),
-            );
-          }
-          // Очищаем промежуточный результат
-          _currentWords = '';
+  String _lastFinalResult = '';
+
+  void _onSpeechResult(SpeechRecognitionResult result) {
+    final recognized = result.recognizedWords.trim();
+
+    if (result.finalResult) {
+      if (recognized.isNotEmpty) {
+        final newPart = _getDeltaText(_lastFinalResult, recognized);
+        if (newPart.isNotEmpty) {
+          final updatedText = _textController.text.trim();
+          final nextText =
+              updatedText.isNotEmpty ? '$updatedText $newPart' : newPart;
+
+          _textController.text = nextText;
+          _textController.selection = TextSelection.fromPosition(
+            TextPosition(offset: _textController.text.length),
+          );
         }
-      } else {
-        // Промежуточный результат - показываем в пузырьке
-        _currentWords = newRecognizedWords;
+
+        _lastFinalResult = recognized;
       }
-    });
+
+      setState(() {
+        _currentWords = '';
+      });
+    } else {
+      setState(() {
+        _currentWords = recognized;
+      });
+    }
+  }
+
+  String _getDeltaText(String previous, String current) {
+    if (current.startsWith(previous)) {
+      return current.substring(previous.length).trim();
+    }
+    return current;
   }
 
   void _startAnimations() {
