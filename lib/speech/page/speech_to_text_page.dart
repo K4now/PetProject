@@ -101,15 +101,7 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
               _isListening = false;
             });
             _stopAnimations();
-
-            // Автоматически перезапускаем прослушивание, если пользователь хочет продолжить
-            if (_shouldKeepListening) {
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (_shouldKeepListening && _speechEnabled) {
-                  _startListening();
-                }
-              });
-            }
+            // УБРАН автоперезапуск прослушивания
           }
         },
       );
@@ -207,24 +199,16 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
   }
 
   void _onSpeechResult(result) {
-    String newRecognizedWords = result.recognizedWords;
+    String newRecognizedWords = result.recognizedWords.trim();
     setState(() {
       _confidenceLevel = result.confidence;
       if (!result.finalResult) {
-        // Показываем только текущий результат
         _textController.text = newRecognizedWords;
         _textController.selection = TextSelection.fromPosition(
           TextPosition(offset: _textController.text.length),
         );
-      } else if (result.finalResult && newRecognizedWords.isNotEmpty) {
-        // Финальный результат: добавляем только в историю, поле не меняем
-        _recognizedText += '${newRecognizedWords.trim()}\n';
-        _speechHistory.insert(0, newRecognizedWords.trim());
-        if (_speechHistory.length > 10) {
-          _speechHistory.removeLast();
-        }
-        // Не меняем _textController.text!
       }
+      // Финальный результат не добавляем никуда
     });
   }
 
@@ -573,7 +557,8 @@ class _SpeechToTextPageState extends State<SpeechToTextPage>
                 alignment: Alignment.centerLeft,
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: Colors.blue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(18),
